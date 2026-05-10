@@ -490,6 +490,189 @@ md2wechat config validate
 
 ---
 
+---
+
+## Brand Profile
+
+Brand Profile 是 Agent 读取的品牌与风格配置文件，**CLI 不解析此文件**。
+
+与 CLI 运行时配置（`~/.md2wechat.yaml`）不同，Brand Profile 专门为 Agent 设计，用于记录内容生成的风格约束和偏好。
+
+### 快速开始
+
+```bash
+# 初始化 Brand Profile（幂等操作，文件存在时不覆盖）
+md2wechat brand init
+
+# 查看当前 Brand Profile
+md2wechat brand show
+md2wechat brand show --json
+```
+
+Brand Profile 位置：
+
+```text
+~/.config/md2wechat/brand.md
+```
+
+### Markdown 格式说明
+
+Brand Profile 使用 **Markdown 格式**，而不是 YAML。这让你可以用完全自然的语言书写品牌风格和偏好。
+
+以下是一份完整的 Markdown 模板示例：
+
+```markdown
+# md2wechat Brand Profile
+
+## 基本信息
+
+**名字 / 品牌名**：极客杰尼
+
+**简介**：AI 应用开发者，记录 AI 工具、内容系统和独立产品实践。
+
+---
+
+## 语气与风格
+
+**我的风格**：
+犀利实用，第一人称。直接说结论，然后给证据。
+像在和朋友聊干货，不废话，不升华，不说"希望对你有帮助"。
+
+**我要避免的表达**：
+- 过多 emoji（最多 1-2 个）
+- 空泛鸡汤（"在这个充满变化的时代..."）
+- 过度营销词汇（"革命性"、"颠覆性"）
+- 被动语态（"被认为"、"据悉"）
+
+---
+
+## 文章开头偏好
+
+**我的偏好**：verdict_first（先结论）
+
+我喜欢开门见山，第一段就给出核心判断。
+例如："这个工具我用了三个月，值得推荐，原因有三。"
+
+---
+
+## 排版约束
+
+- 最多模块数：6（上限 43，填 0 使用默认值）
+- 最多 CTA 数：1（上限 2）
+- 最多引用数：2（上限 10）
+- 最多 Hero 数：1（固定上限）
+
+---
+
+## 默认 CTA（行动引导）
+
+**标题**：如果这篇对你有启发
+**正文**：欢迎关注，我在持续记录 AI 工具和独立开发实践。每周更新，不灌水。
+**行动**：关注 / 转发给有需要的朋友
+
+---
+
+## 作者卡片
+
+**名字**：极客杰尼
+**头衔**：AI 应用开发者 / 独立开发者
+**简介**：记录 AI 工具、内容系统和独立产品实践。关注从 idea 到 MVP 的完整路径。
+
+---
+
+## 风格参考文件（可选）
+
+**路径**：~/Documents/brand/voice-guide.md
+
+（Agent 会读取此文件作为额外的风格参考）
+```
+
+### 为什么是 Markdown 而不是 YAML？
+
+品牌风格本质上是语言性的，而不是结构化的。Markdown 允许你用**完全自然的语言**描述风格偏好，Agent 可以直接理解这些自然语言描述。
+
+**越具体，Agent 越能准确还原你的风格。**
+
+### Agent 读取方式
+
+Agent 读取 Brand Profile 时：
+
+```python
+import os
+
+brand_path = os.path.expanduser("~/.config/md2wechat/brand.md")
+brand_content = ""
+if os.path.exists(brand_path):
+    with open(brand_path) as f:
+        brand_content = f.read()
+
+# brand_content 包含完整的 Markdown 文本
+# Agent 将其作为上下文注入到排版决策中
+```
+
+### JSON 响应格式
+
+`md2wechat brand show --json` 返回：
+
+```json
+{
+  "success": true,
+  "code": "BRAND_SHOWN",
+  "data": {
+    "path": "~/.config/md2wechat/brand.md",
+    "content": "# md2wechat Brand Profile\n\n## 基本信息\n..."
+  }
+}
+```
+
+注意：`data.content` 是完整的 Markdown 文本，而不是解析后的结构。
+
+### 降级行为与容错
+
+1. **文件不存在**：Agent 继续工作，不报错；使用内置默认值。
+
+2. **文件不可读（权限问题）**：
+   - `md2wechat brand show` 返回 `BRAND_READ_FAILED`
+   - Agent 应降级到默认值并通知用户
+
+3. **Markdown 无语法错误**：Markdown 是自由格式文本，不存在"格式错误"。只要文件可读，Agent 就能使用。
+
+### 与 CLI 运行时配置的区别
+
+| 配置文件 | 位置 | 用途 | 解析方 | 必需 |
+|---------|------|------|--------|------|
+| CLI 运行时配置 | `~/.md2wechat.yaml` | API Keys、Provider、主题 | CLI | 创建草稿时必需 |
+| Brand Profile | `~/.config/md2wechat/brand.md` | 内容风格、排版偏好、约束 | Agent | 可选（无则使用默认） |
+
+**CLI 运行时配置** 典型场景：切换图片 Provider、配置 WeChat AppID、选择主题。
+
+**Brand Profile** 典型场景：Agent 生成内容时遵守品牌约束、追踪作者信息、统一语气风格。
+
+### 常见场景
+
+#### 只初始化，保持最小配置
+
+```bash
+md2wechat brand init
+# 编辑 ~/.config/md2wechat/brand.md，填入基本信息和语气风格即可
+```
+
+结果：Agent 会尊重你的品牌名和语气，但使用所有其他默认值。
+
+#### Agent 读取并应用 Brand Profile
+
+Agent 应该：
+
+```bash
+# 1. 检查 Brand Profile 是否存在
+md2wechat brand show --json
+
+# 2. 如果存在，读取 data.content 作为完整上下文
+# 3. 生成内容时应用其中的风格偏好、约束、CTA 和作者信息
+```
+
+---
+
 ## 相关文档
 
 - [新手快速开始](QUICKSTART.md)
